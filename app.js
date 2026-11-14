@@ -1,6 +1,6 @@
 (() => {
 'use strict';
-const C = window.CONFIG, KEY = 'tonflow:v1', CUR = Object.keys(C.COLORS), DEC = { TON: 4, USDT: 2, BTC: 8, ETH: 6 };
+const C = window.CONFIG, KEY = 'calc:v1', CUR = Object.keys(C.COLORS), DEC = { TON: 4, USDT: 2, BTC: 8, ETH: 6 };
 const $ = (s, e = document) => e.querySelector(s), $$ = (s, e = document) => [...e.querySelectorAll(s)];
 const uid = p => p + Math.random().toString(36).slice(2, 9);
 const nf = (n, d) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: d }).format(n);
@@ -38,8 +38,31 @@ if (tgU) S.user.isAdmin = C.ADMIN_TG_IDS.includes(tgU.id);
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* приватный режим */ } };
 const bal = c => S.wallet.balances[c] || 0;
 const setBal = (c, v) => { S.wallet.balances[c] = Math.max(0, rd(v, c)); };
-const total = () => CUR.reduce((s, c) => s + bal(c) * C.PRICES[c], 0);
+/* Курсы: по умолчанию из config.js, но перезаписываются живыми данными (см. fetchPrices) или значениями, сохранёнными админом */
+const PRICES = Object.assign({}, C.PRICES, S.prices || {});
+const minDepUsd = () => S.minDepositUsd ?? C.MIN_DEPOSIT_USD ?? 0;
+const minDep = c => rd(minDepUsd() / PRICES[c], c);
+const total = () => CUR.reduce((s, c) => s + bal(c) * PRICES[c], 0);
 const tx = (type, currency, amount, note = '') => { S.txs.unshift({ id: uid('t_'), type, currency, amount, status: 'ok', note, createdAt: Date.now() }); S.txs = S.txs.slice(0, 100); };
+
+/* ---------- Живые курсы (CoinGecko) ---------- */
+const CG_IDS = { TON: 'the-open-network', USDT: 'tether', BTC: 'bitcoin', ETH: 'ethereum' };
+let pricesLoading = false;
+async function fetchPrices(manual) {
+  if (!manual && (S.pricesManual || C.PRICES_LIVE === false)) return; // курс закреплён вручную или автообновление выключено
+  if (pricesLoading) return; pricesLoading = true;
+  try {
+    const ids = Object.values(CG_IDS).join(',');
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
+    if (!r.ok) throw new Error('http ' + r.status);
+    const data = await r.json();
+    let changed = false;
+    CUR.forEach(c => { const p = data[CG_IDS[c]] && data[CG_IDS[c]].usd; if (typeof p === 'number' && p > 0) { PRICES[c] = p; changed = true; } });
+    if (changed) { S.prices = Object.assign({}, PRICES); S.pricesUpdatedAt = Date.now(); S.pricesError = false; save();
+      if (['wallet', 'profile', 'roulette', 'p2p', 'admin'].includes(tab)) render(); }
+  } catch (e) { S.pricesError = true; /* оставляем последние известные курсы */ }
+  pricesLoading = false;
+}
 
 /* ---------- UI-утилиты ---------- */
 const ic = () => window.lucide && window.lucide.createIcons();
@@ -67,21 +90,23 @@ const txRow = t => li(TXI[t.type], TXT[t.type] + (t.note ? ', ' + esc(t.note) : 
 const seg = (items, cur, a) => `<div class="seg">${items.map(([v, l]) => `<button class="${v === cur ? 'on' : ''}" data-a="${a}" data-v="${v}">${l}</button>`).join('')}</div>`;
 
 /* ---------- Wallet ---------- */
-const card = (c, i) => `<div class="card" data-i="${i}" style="background:${C.COLORS[c][0]}"><div class="ct"><div class="ci"><i data-lucide="${C.ICONS[c]}"></i></div><div><b>${C.NAMES[c]}</b><small>${c}</small></div></div><div><div class="cb">${fmt(bal(c), c)} <small>${c}</small></div><div class="cu">≈ ${usd(bal(c) * C.PRICES[c])}</div></div></div>`;
+const card = (c, i) => `<div class="card" data-i="${i}" style="background:${C.COLORS[c][0]}"><div class="ct"><div class="ci"><i data-lucide="${C.ICONS[c]}"></i></div><div><b>${C.NAMES[c]}</b><small>${c}</small></div></div><div><div class="cb">${fmt(bal(c), c)} <small>${c}</small></div><div class="cu">≈ ${usd(bal(c) * PRICES[c])}</div></div></div>`;
 const pend = () => { const p = S.trades.filter(t => NEXT[t.status].length); return p.length ? `<small class="pend">В сделках: ${p.map(t => (t.buyerId === S.user.id ? '+' : '−') + fmt(t.amount, t.currency) + ' ' + t.currency).join(', ')}</small>` : ''; };
-const walletView = () => `<header class="top"><button class="logo" data-a="logo">TON<span>FLOW</span></button><div class="tr"><button class="ib" data-a="bell" aria-label="Уведомления"><i data-lucide="bell"></i></button><button class="av" data-a="tab" data-v="profile" aria-label="Профиль">${esc(S.user.avatar)}</button></div></header>
-<section class="tot"><small>Общий баланс</small><h1>${usd(total())}</h1>${pend()}</section>
+const LOGO_MARK = `<svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="lgLogo" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="var(--blue)"/><stop offset="1" stop-color="var(--blue2)"/></linearGradient></defs><path d="M32 26H15v48h17" fill="none" stroke="url(#lgLogo)" stroke-width="11" stroke-linecap="square"/><path d="M85 26H68v48h17" fill="none" stroke="url(#lgLogo)" stroke-width="11" stroke-linecap="square"/><path d="M80 10L20 94" stroke="url(#lgLogo)" stroke-width="10" stroke-linecap="round"/></svg>`;
+const walletView = () => `<header class="top"><button class="logo" data-a="logo" aria-label="CALC">${LOGO_MARK}<span>CALC</span></button><div class="tr"><button class="ib" data-a="bell" aria-label="Уведомления"><i data-lucide="bell"></i></button><button class="av" data-a="tab" data-v="profile" aria-label="Профиль">${esc(S.user.avatar)}</button></div></header>
+<section class="tot"><small>Общий баланс</small><h1>${usd(total())}</h1>${pend()}<small class="mut" style="display:block;margin-top:4px">${S.pricesUpdatedAt ? 'Курсы обновлены: ' + dt(S.pricesUpdatedAt) : 'Курсы: сохранённые значения'}${S.pricesError ? ' (не удалось обновить, используются последние известные)' : ''}</small></section>
 <div class="stack" id="stack">${CUR.map(card).join('')}</div>
 <div class="dots"><button class="ib sm" data-a="prev" aria-label="Предыдущая"><i data-lucide="chevron-left"></i></button>${CUR.map((c, i) => `<button class="dot" data-a="dot" data-v="${i}" aria-label="${c}"></button>`).join('')}<button class="ib sm" data-a="next" aria-label="Следующая"><i data-lucide="chevron-right"></i></button></div>
 <div class="acts">${[['deposit', 'arrow-down-left', 'Пополнить'], ['send', 'arrow-up-right', 'Отправить'], ['swap', 'repeat', 'Обменять']].map(a => `<button class="act" data-a="${a[0]}"><span><i data-lucide="${a[1]}"></i></span>${a[2]}</button>`).join('')}</div>
-<section class="glass pad"><div class="row sp"><b>Адрес пополнения</b><span class="badge" id="nt">${C.NETS[CUR[S.idx]]}</span></div><button class="addr" id="adb" data-a="copy" data-t="${C.ADDR[CUR[S.idx]]}"><span id="ad">${C.ADDR[CUR[S.idx]]}</span><i data-lucide="copy"></i></button><p class="mut sm">Автоматическое зачисление пока не подключено: переводы на этот адрес баланс в приложении не пополняют.</p></section>
+<section class="glass pad"><div class="row sp"><b>Адрес пополнения</b><span class="badge" id="nt">${C.NETS[CUR[S.idx]]}</span></div><button class="addr" id="adb" data-a="copy" data-t="${C.ADDR[CUR[S.idx]]}"><span id="ad">${C.ADDR[CUR[S.idx]]}</span><i data-lucide="copy"></i></button><p class="mut sm" id="mindep">Минимальная сумма пополнения: ${fmt(minDep(CUR[S.idx]), CUR[S.idx])} ${CUR[S.idx]} (≈ $${nf(minDepUsd(), 2)}).</p><p class="mut sm">Автоматическое зачисление - ожидайте.</p></section>
 <h3>Последние операции</h3><section class="glass list">${S.txs.length ? S.txs.slice(0, 5).map(txRow).join('') : empty('inbox', 'Операций пока нет', 'Пополните кошелёк или обменяйте валюту')}</section>`;
 function lay(dx = 0) {
   const cards = $$('.card'), n = cards.length; if (!n) return;
   cards.forEach((el, i) => { const d = (i - S.idx + n) % n; el.style.zIndex = n - d; el.style.opacity = d > 2 ? 0 : 1;
     el.style.transform = d === 0 ? `translateX(${dx}px) rotate(${dx / 18}deg)` : `translateY(${d * 16}px) scale(${1 - d * .06})`; });
   $('#view').style.setProperty('--accent', C.COLORS[CUR[S.idx]][1]); $$('.dot').forEach((x, i) => x.classList.toggle('on', i === S.idx));
-  const ab = $('#adb'); if (ab) { const c = CUR[S.idx]; ab.dataset.t = C.ADDR[c]; $('#ad', ab).textContent = C.ADDR[c]; const nt = $('#nt'); if (nt) nt.textContent = C.NETS[c]; }
+  const ab = $('#adb'); if (ab) { const c = CUR[S.idx]; ab.dataset.t = C.ADDR[c]; $('#ad', ab).textContent = C.ADDR[c]; const nt = $('#nt'); if (nt) nt.textContent = C.NETS[c];
+    const md = $('#mindep'); if (md) md.textContent = `Минимальная сумма пополнения: ${fmt(minDep(c), c)} ${c} (≈ $${nf(minDepUsd(), 2)}).`; }
 }
 const goCard = k => { S.idx = (S.idx + k + CUR.length) % CUR.length; save(); lay(); };
 function mountStack() {
@@ -92,8 +117,9 @@ function mountStack() {
   st.onpointerup = end; st.onpointercancel = end; lay();
 }
 function deposit() {
-  modal('Пополнить', `<label>Валюта<select class="in" id="c">${opts(CUR, CUR[S.idx])}</select></label><small id="nt"></small><button class="addr" id="ad2" data-a="copy"></button><p class="mut sm">Автоматическое зачисление пока не подключено: переводы на этот адрес баланс в приложении не пополняют.</p>`, (w) => {
-    const up = () => { const c = $('#c', w).value, b = $('#ad2', w); $('#nt', w).textContent = C.NETS[c]; b.dataset.t = C.ADDR[c]; b.innerHTML = `<span>${C.ADDR[c]}</span><i data-lucide="copy"></i>`; ic(); }; up(); $('#c', w).onchange = up;
+  modal('Пополнить', `<label>Валюта<select class="in" id="c">${opts(CUR, CUR[S.idx])}</select></label><small id="nt"></small><button class="addr" id="ad2" data-a="copy"></button><p class="mut sm" id="mindep2"></p><p class="mut sm">Автоматическое зачисление - ожидайте.</p>`, (w) => {
+    const up = () => { const c = $('#c', w).value, b = $('#ad2', w); $('#nt', w).textContent = C.NETS[c]; b.dataset.t = C.ADDR[c]; b.innerHTML = `<span>${C.ADDR[c]}</span><i data-lucide="copy"></i>`;
+      $('#mindep2', w).textContent = `Минимальная сумма пополнения: ${fmt(minDep(c), c)} ${c} (≈ $${nf(minDepUsd(), 2)}).`; ic(); }; up(); $('#c', w).onchange = up;
   });
 }
 function send() {
@@ -109,7 +135,7 @@ function send() {
 }
 function swap() {
   modal('Обменять', `<div class="row"><label>Отдаёте<select class="in" id="f">${opts(CUR, CUR[S.idx])}</select></label><label>Получаете<select class="in" id="t">${opts(CUR, CUR[(S.idx + 1) % CUR.length])}</select></label></div><label>Сумма<input class="in" id="a" inputmode="decimal" placeholder="0.00"></label><div class="sum"><div><span>Доступно</span><b id="av"></b></div><div><span>Комиссия ${C.SWAP_FEE * 100}%</span><b id="fe">0</b></div><div><span>Вы получите</span><b id="out">0</b></div></div><div class="err" data-e></div><button class="btn" id="go">Обменять</button>`, (w, close) => {
-    const calc = () => { const f = $('#f', w).value, t = $('#t', w).value, a = num($('#a', w).value) || 0, o = rd(a * C.PRICES[f] / C.PRICES[t] * (1 - C.SWAP_FEE), t);
+    const calc = () => { const f = $('#f', w).value, t = $('#t', w).value, a = num($('#a', w).value) || 0, o = rd(a * PRICES[f] / PRICES[t] * (1 - C.SWAP_FEE), t);
       $('#av', w).textContent = fmt(bal(f), f) + ' ' + f; $('#fe', w).textContent = fmt(a * C.SWAP_FEE, f) + ' ' + f; $('#out', w).textContent = fmt(o, t) + ' ' + t; return o; };
     ['#f', '#t', '#a'].forEach(s => $(s, w).oninput = calc); calc();
     bind($('#go', w), async () => { const f = $('#f', w).value, t = $('#t', w).value, a = num($('#a', w).value), o = calc();
@@ -152,15 +178,15 @@ function setTrade(t, st) {
 
 /* ---------- Roulette ---------- */
 const RC0 = C.ROULETTE, segs = () => S.rc || RC0.segments;
-const minB = c => rd(Math.ceil(RC0.minBetUsd / C.PRICES[c] * 100) / 100, c), maxB = c => rd(RC0.maxBetUsd / C.PRICES[c], c);
-const bu = x => '≈ ' + usd(x * C.PRICES[RC]) + ', минимум $' + RC0.minBetUsd;
+const minB = c => rd(Math.ceil(RC0.minBetUsd / PRICES[c] * 100) / 100, c), maxB = c => rd(RC0.maxBetUsd / PRICES[c], c);
+const bu = x => '≈ ' + usd(x * PRICES[RC]) + ', минимум $' + RC0.minBetUsd;
 let spinning = false, wrot = 0, RC = RC0.currencies[0], lastBet = 10;
 const segColor = m => m === 0 ? '#13243F' : m < 1 ? '#1D4F8F' : m < 3 ? '#248BFA' : '#54B8FF';
 function rouletteView() {
   const s = segs(), a = 360 / s.length, grad = s.map((x, i) => `${segColor(x.m)} ${i * a}deg ${(i + 1) * a}deg`).join(',');
   return `<h1 class="pt">Roulette</h1>${seg(RC0.currencies.map(c => [c, c]), RC, 'rcur')}
 <section class="rpanel"><div class="row sp"><div><small>Баланс</small><b class="rbal" id="rb">${fmt(bal(RC), RC)} ${RC}</b></div></div>
-<div class="wheel-wrap"><div class="ptr"></div><div class="wheel" id="wheel" style="background:conic-gradient(${grad});transform:rotate(${wrot}deg)">${s.map((x, i) => `<div class="wl" style="transform:rotate(${i * a + a / 2}deg)">${x.m ? '×' + x.m : '✕'}</div>`).join('')}</div><div class="hub">TF</div></div>
+<div class="wheel-wrap"><div class="ptr"></div><div class="wheel" id="wheel" style="background:conic-gradient(${grad});transform:rotate(${wrot}deg)">${s.map((x, i) => `<div class="wl" style="transform:rotate(${i * a + a / 2}deg)">${x.m ? '×' + x.m : '✕'}</div>`).join('')}</div><div class="hub">C</div></div>
 <label>Ставка, ${RC}<input class="in" id="bet" data-in="bet" inputmode="decimal" value="${lastBet}"></label><small id="bu">${bu(num(lastBet) || 0)}</small>
 <div class="qb"><button data-a="bq" data-v="min">Мин</button><button data-a="bq" data-v="half">½</button><button data-a="bq" data-v="dbl">×2</button><button data-a="bq" data-v="max">Макс</button></div><div class="err" data-e></div><button class="btn spin" id="spin" data-a="spin" ${spinning ? 'disabled' : ''}>SPIN</button></section>
 <h3>Последние результаты</h3><div class="hist">${S.games.length ? S.games.slice(0, 12).map(g => `<span class="hc ${g.payout > g.bet ? 'pos' : g.payout < g.bet ? 'neg' : ''}">×${g.result}, ${g.currency}</span>`).join('') : '<small>Игр пока не было</small>'}</div>`;
@@ -215,16 +241,18 @@ const oddsHTML = () => { const s = segs(), sum = s.reduce((a, x) => a + x.w, 0) 
   return `<section class="glass pad" style="margin-top:0"><p class="mut sm" style="margin-top:0">Множитель и вес каждого сектора. Возврат игрокам (RTP): <b>${nf(rtp * 100, 1)}%</b></p>${s.map((x, i) => `<div class="row" style="margin-bottom:8px"><span class="chip" style="flex:none;width:34px;text-align:center">${i + 1}</span><input class="in" data-rm="${i}" value="${x.m}" inputmode="decimal" aria-label="Множитель"><input class="in" data-rw="${i}" value="${x.w}" inputmode="decimal" aria-label="Вес"><b style="flex:none;width:56px;text-align:right">${nf(x.w / sum * 100, 1)}%</b></div>`).join('')}<div class="err" data-e2x></div><div class="row"><button class="btn sec" data-a="rreset">Сбросить</button><button class="btn" data-a="rsave">Сохранить</button></div></section>`; };
 const adminBody = () => {
   if (AT === 'roul') return oddsHTML();
+  if (AT === 'dep') return `<section class="glass pad" style="margin-top:0"><p class="mut sm" style="margin-top:0">Минимальная сумма пополнения в долларах. Эквивалент в каждой валюте пересчитывается автоматически по текущему курсу.</p><label>Минимум, $<input class="in" id="mindep" inputmode="decimal" value="${minDepUsd()}"></label><div class="err" data-emd></div><button class="btn" data-a="mdsave">Сохранить</button></section>`;
+  if (AT === 'rates') return `<section class="glass pad" style="margin-top:0"><p class="mut sm" style="margin-top:0">${S.pricesManual ? 'Курсы заданы вручную, автообновление остановлено.' : 'Курсы обновляются автоматически из CoinGecko' + (S.pricesUpdatedAt ? ' (посл. обновление: ' + dt(S.pricesUpdatedAt) + ')' : '') + '.'}</p>${CUR.map(c => `<label>${c}, $<input class="in" data-pr="${c}" inputmode="decimal" value="${PRICES[c]}"></label>`).join('')}<div class="err" data-epr></div><div class="row"><button class="btn sec" data-a="prreset">Вкл. автообновление</button><button class="btn" data-a="prsave">Сохранить вручную</button></div></section>`;
   if (AT === 'bal') return `<section class="glass pad" style="margin-top:0"><p class="mut sm" style="margin-top:0">Баланс на этом устройстве.</p>${CUR.map(c => `<label>${c}<input class="in" data-b="${c}" inputmode="decimal" value="${bal(c)}"></label>`).join('')}<div class="err" data-eb></div><button class="btn" data-a="bsave">Сохранить баланс</button></section>`;
   if (AT === 'trades') return S.trades.length ? `<section class="glass list" style="margin-top:0">${S.trades.map(t => `<div class="li" style="flex-wrap:wrap"><div class="lim"><b>${t.buyerId === S.user.id ? 'Покупка' : 'Продажа'} ${fmt(t.amount, t.currency)} ${t.currency}</b><small>${dt(t.createdAt)}, ${rub(t.total)}</small></div><span class="st ${t.status}">${ST[t.status]}</span>${NEXT[t.status].length ? `<div class="row" style="flex-basis:100%">${NEXT[t.status].map(x => `<button class="btn sec s" data-a="tset" data-v="${t.id}:${x}">${ST[x]}</button>`).join('')}</div>` : ''}</div>`).join('')}</section>` : empty('handshake', 'Сделок нет', 'Они появятся после покупки на вкладке P2P');
-  return `<section class="glass pad" style="margin-top:0"><h3 style="margin:0 0 12px">Новый ордер</h3><label>Ник<input class="in" id="an2" maxlength="20" value="TONFLOW"></label><small>Аватар</small><div class="emo" style="margin:8px 0 14px">${C.AVATARS.map((e, i) => `<button data-a="av" data-av="${e}" class="${i ? '' : 'on'}">${e}</button>`).join('')}</div>
+  return `<section class="glass pad" style="margin-top:0"><h3 style="margin:0 0 12px">Новый ордер</h3><label>Ник<input class="in" id="an2" maxlength="20" value="CALC"></label><small>Аватар</small><div class="emo" style="margin:8px 0 14px">${C.AVATARS.map((e, i) => `<button data-a="av" data-av="${e}" class="${i ? '' : 'on'}">${e}</button>`).join('')}</div>
 <div class="row"><label>Валюта<select class="in" id="ac">${opts(['TON', 'USDT'])}</select></label><label>Направление<select class="in" id="ad"><option value="sell">Продаёт крипту</option><option value="buy">Покупает крипту</option></select></label></div>
 <div class="row"><label>Курс, ₽<input class="in" id="ar" inputmode="decimal"></label><label>Объём<input class="in" id="av" inputmode="decimal"></label></div>
 <div class="row"><label>Мин, ₽<input class="in" id="an" inputmode="decimal"></label><label>Макс, ₽<input class="in" id="ax" inputmode="decimal"></label></div>
 <label>Способ оплаты<input class="in" id="ap" maxlength="30"></label><div class="err" data-e></div><button class="btn" data-a="ocreate">Создать ордер</button></section>
 <h3>Ордера (${S.orders.length})</h3>${S.orders.length ? S.orders.map(o => `<article class="glass oc"><div class="oh"><span class="av">${esc(o.avatar)}</span><b>${esc(o.nick)}</b><span class="st ${o.status === 'active' ? 'done' : ''}">${o.status === 'active' ? 'активен' : 'выключен'}</span></div><div class="meta"><span class="chip">${o.direction === 'sell' ? 'продаёт' : 'покупает'} ${o.currency}</span><span class="chip">${rub(o.rate)}</span><span class="chip">${fmt(o.availableAmount, o.currency)}</span><span class="chip">${esc(o.paymentMethod)}</span></div><div class="row"><button class="btn sec s" data-a="otoggle" data-v="${o.id}">${o.status === 'active' ? 'Выключить' : 'Включить'}</button><button class="btn danger s" data-a="odel" data-v="${o.id}">Удалить</button></div></article>`).join('') : empty('package-open', 'Ордеров нет', 'Создайте первый ордер выше')}`;
 };
-const adminView = () => `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><button class="ib" data-a="tab" data-v="profile" aria-label="Назад"><i data-lucide="chevron-left"></i></button><h1 style="font-size:24px">Админ-панель</h1></div>${seg([['orders', 'Ордера'], ['trades', 'Сделки'], ['roul', 'Рулетка'], ['bal', 'Баланс']], AT, 'atab')}${adminBody()}`;
+const adminView = () => `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><button class="ib" data-a="tab" data-v="profile" aria-label="Назад"><i data-lucide="chevron-left"></i></button><h1 style="font-size:24px">Админ-панель</h1></div>${seg([['orders', 'Ордера'], ['trades', 'Сделки'], ['roul', 'Рулетка'], ['dep', 'Пополнение'], ['rates', 'Курсы'], ['bal', 'Баланс']], AT, 'atab')}${adminBody()}`;
 function adminPanel() { tab = 'admin'; render(true); }
 
 /* ---------- Действия ---------- */
@@ -236,7 +264,7 @@ const A = {
   copy: el => { (navigator.clipboard ? navigator.clipboard.writeText(el.dataset.t || '') : Promise.reject()).then(() => toast('Адрес скопирован'), () => toast('Не удалось скопировать', 'err')); },
   logo: () => { const n = Date.now(); taps = n - tapT < 3000 ? taps + 1 : 1; tapT = n; if (taps >= 5) { taps = 0; if (!canAdmin()) return; S.user.isAdmin ? adminPanel() : adminLogin(); } },
   dir: el => { U.dir = el.dataset.v; render(); }, pcur: el => { U.cur = el.dataset.v; render(); }, sort: () => { U.asc = !U.asc; render(); }, order: el => openOrder(el.dataset.v),
-  rcur: el => { if (spinning) return; RC = el.dataset.v; lastBet = Math.max(minB(RC), rd(10 / C.PRICES[RC], RC)); render(); },
+  rcur: el => { if (spinning) return; RC = el.dataset.v; lastBet = Math.max(minB(RC), rd(10 / PRICES[RC], RC)); render(); },
   bq: el => { const b = num($('#bet').value) || 0, v = el.dataset.v, m = Math.min(maxB(RC), bal(RC)), x = v === 'min' ? minB(RC) : v === 'half' ? Math.max(minB(RC), rd(b / 2, RC)) : v === 'dbl' ? Math.min(m, rd(b * 2, RC)) : rd(m, RC); $('#bet').value = x; lastBet = x; $('#bu').textContent = bu(x); },
   spin,
   edit: editProfile, theme: el => { S.theme = el.dataset.v; save(); applyTheme(); render(); },
@@ -256,6 +284,9 @@ const A = {
     if (![r, v, mn, mx].every(x => x > 0)) return void (e.textContent = 'Заполните курс, объём, минимум и максимум положительными числами');
     if (mn > mx) return void (e.textContent = 'Минимум не может быть больше максимума'); if (nk.length < 2) return void (e.textContent = 'Укажите ник от 2 символов'); if (p.length < 2) return void (e.textContent = 'Укажите способ оплаты');
     S.orders.unshift({ id: uid('o_'), ownerId: 'admin', nick: nk, avatar: av ? av.dataset.av : C.AVATARS[0], currency: c, direction: g('#ad'), rate: r, availableAmount: v, minAmount: mn, maxAmount: mx, paymentMethod: p, status: 'active' }); save(); adminDraw(); toast('Ордер создан'); },
+  mdsave: () => { const w = $('#view'), v = num($('#mindep', w).value); if (!(v >= 0)) return void ($('[data-emd]', w).textContent = 'Введите число не меньше нуля'); S.minDepositUsd = v; save(); render(); toast('Минимальная сумма сохранена'); },
+  prsave: () => { const w = $('#view'), v = CUR.map(c => [c, num($(`[data-pr="${c}"]`, w).value)]); if (v.some(x => !(x[1] > 0))) return void ($('[data-epr]', w).textContent = 'Введите числа больше нуля'); v.forEach(x => PRICES[x[0]] = x[1]); S.prices = Object.assign({}, PRICES); S.pricesManual = true; S.pricesUpdatedAt = Date.now(); save(); render(); toast('Курсы сохранены вручную'); },
+  prreset: () => { S.pricesManual = false; delete S.prices; save(); fetchPrices(true); render(); toast('Автообновление курсов включено'); },
   otoggle: el => { const o = S.orders.find(x => x.id === el.dataset.v); if (o) { o.status = o.status === 'active' ? 'inactive' : 'active'; save(); adminDraw(); } },
   odel: async el => { if (await ask('Удалить ордер навсегда?', 'Удалить')) { S.orders = S.orders.filter(x => x.id !== el.dataset.v); save(); adminDraw(); toast('Ордер удалён'); } }
 };
@@ -281,4 +312,5 @@ $('#nav').innerHTML = NAV.map(n => `<button data-a="tab" data-v="${n[0]}"><i dat
 applyTheme(); matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 const v0 = $('#view'); v0.innerHTML = '<div class="sk"></div><div class="sk" style="height:200px"></div><div class="sk"></div>'; v0.classList.add('in'); ic();
 setTimeout(render, 450);
+fetchPrices(); setInterval(() => fetchPrices(), 5 * 60 * 1000);
 })();

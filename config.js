@@ -15,7 +15,9 @@ window.CONFIG = {
   },
   NETS: { TON: 'TON', USDT: 'USDT TRC-20', BTC: 'Bitcoin', ETH: 'ERC-20' },
   START_BALANCES: { TON: 100, USDT: 250, BTC: 0.005, ETH: 0.1 },
-  PRICES: { TON: 5.2, USDT: 1, BTC: 65000, ETH: 3200 }, // USD
+  PRICES: { TON: 5.2, USDT: 1, BTC: 65000, ETH: 3200 }, // USD, запасные значения на случай, если курсы не удалось загрузить
+  PRICES_LIVE: true, // true = курсы подтягиваются автоматически из CoinGecko (можно отключить, задав курс вручную в админке)
+  MIN_DEPOSIT_USD: 10, // минимальная сумма пополнения в долларах (можно поменять в админ-панели)
   NAMES: { TON: 'Toncoin', USDT: 'Tether', BTC: 'Bitcoin', ETH: 'Ethereum' },
   ICONS: { TON: 'gem', USDT: 'circle-dollar-sign', BTC: 'bitcoin', ETH: 'hexagon' },
   COLORS: {
@@ -33,5 +35,15 @@ window.CONFIG = {
       { m: 0, w: 10 }, { m: 1, w: 12 }, { m: 0, w: 10 }, { m: 5, w: 2 }
     ]
   },
-  SUPABASE: { url: '', anonKey: '' }
+  // Нужно только для функции «начислить баланс по ID» в админ-панели.
+  // Без этого всё остальное (включая саму админку) работает как раньше, на localStorage.
+  // Без SQL и таблиц, 2 минуты:
+  // 1) jsonbin.io → зарегистрируйтесь (бесплатно).
+  // 2) Create Bin → в поле содержимого вставьте просто {} → Create.
+  // 3) Скопируйте Bin ID (виден в адресной строке/в списке бинов) и X-Master-Key
+  //    (Account → API Keys) сюда:
+  // ВАЖНО: ключ X-Master-Key будет виден в коде сайта всем желающим (это клиентское
+  // приложение без сервера) — он даёт полный доступ к этому бину. Не используйте
+  // этот бин ни для чего, кроме демо-баланса, и не переиспользуйте этот ключ больше нигде.
+  JSONBIN: { binId: '6af8a904ac6210605a87d5ba', apiKey: '$2a$10$tuLN0FSj6aOLXZW79RFaDeA4ag0Lr8ywHymIoZrZFSazK2Z3D5V3' }
 };

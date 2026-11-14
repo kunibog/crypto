@@ -16,7 +16,7 @@ h1{font-size:clamp(26px,8vw,34px);font-weight:800;letter-spacing:-.03em}h2{font-
 #nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border-radius:22px;font-size:11px;font-weight:600;color:var(--mut)}
 #nav button.on{color:var(--blue);background:rgba(36,139,250,.12)}#nav svg{width:22px;height:22px}
 .top{display:flex;justify-content:space-between;align-items:center}.tr{display:flex;gap:10px;align-items:center}
-.logo{font-weight:800;font-size:20px;letter-spacing:-.03em;padding:6px 0}.logo span{color:var(--blue)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:20px;letter-spacing:-.02em;padding:6px 0}.logo svg{flex:none}
 .ib{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line)}.ib.sm{width:36px;height:36px;border-radius:12px}
 .av{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));font-size:22px;display:grid;place-items:center}
 .tot{margin:20px 4px 0}.tot h1{margin:4px 0 8px}
