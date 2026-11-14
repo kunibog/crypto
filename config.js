@@ -3,15 +3,15 @@ window.CONFIG = {
   // Telegram ID администратора(ов). Узнать свой ID можно у бота @userinfobot.
   // Внутри Telegram админ-панель откроется только для этих ID.
   // Важно: проверка выполняется в браузере и не защищает от подделки. Для настоящей защиты нужен backend.
-  ADMIN_TG_IDS: [],
+  ADMIN_TG_IDS: [6167331943],
   ADMIN_DEMO: true, // вне Telegram (в обычном браузере) вход по любому коду из 4 символов, для проверки. Перед запуском поставьте false
   AVATARS: ['🐻', '🐷', '🐱', '🦊', '🐼', '🐸'], // аватарки для ордеров
   // Адреса пополнения (сейчас заглушки). Баланс в приложении виртуальный, входящие переводы не зачисляются.
   ADDR: {
-    TON: 'UQ_replace_with_ton_address',
-    USDT: 'T_replace_with_trc20_address',
-    BTC: '1_replace_with_btc_address',
-    ETH: '0x_replace_with_erc20_address'
+    TON: 'UQBsW_eG-cFgLArPCYFIak8rvrv_E2ck4f-t07vaKDyQV2h0',
+    USDT: 'TQcMMDwBrxsimfkcJAodRcD72CBCwym9cb',
+    BTC: '1NLZ5TmAokq2egnZrgEkB5XVSAb3ae742K',
+    ETH: '0xb5a916b5e8be368d9e1bb3bc83dc4553445f2002'
   },
   NETS: { TON: 'TON', USDT: 'USDT TRC-20', BTC: 'Bitcoin', ETH: 'ERC-20' },
   START_BALANCES: { TON: 100, USDT: 250, BTC: 0.005, ETH: 0.1 },
