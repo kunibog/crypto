@@ -15,6 +15,8 @@ const EMO = ['🐻', '🐷', '🐱', '🦊', '🐼', '🐸', '🐶', '🐵', '�
 const TG = window.Telegram && window.Telegram.WebApp, tgU = (TG && TG.initDataUnsafe && TG.initDataUnsafe.user) || null;
 try { if (TG) { TG.ready(); TG.expand(); } } catch (e) { /* вне Telegram */ }
 const canAdmin = () => tgU ? C.ADMIN_TG_IDS.includes(tgU.id) : C.ADMIN_DEMO;
+const setVh = () => document.documentElement.style.setProperty('--vh', ((TG && TG.viewportStableHeight) || window.innerHeight) + 'px');
+setVh(); window.addEventListener('resize', setVh); try { if (TG) TG.onEvent('viewportChanged', setVh); } catch (e) { /* вне Telegram */ }
 
 /* ---------- Данные ---------- */
 const seedOrders = () => [
@@ -26,12 +28,12 @@ const seedOrders = () => [
   ['SafeDeal', '🛡️', 'buy', 'USDT', 91.8, 3000, 1000, 70000, 'СБП'],
   ['FastSwap', '🚀', 'buy', 'TON', 478.3, 800, 300, 15000, 'Тинькофф']
 ].map(a => ({ id: uid('o_'), ownerId: 'seed_' + a[0], nick: a[0], avatar: a[1], direction: a[2], currency: a[3], rate: a[4], availableAmount: a[5], minAmount: a[6], maxAmount: a[7], paymentMethod: a[8], status: 'active' }));
-const seed = () => ({ v: 1, theme: 'light', idx: 0,
+const seed = () => ({ v: 2, theme: 'light', idx: 0,
   user: { id: tgU ? 'tg_' + tgU.id : uid('u_'), username: tgU ? (String(tgU.username || tgU.first_name || 'user').replace(/[^A-Za-z0-9_А-Яа-яЁё]/g, '_') + '___').slice(0, 20) : 'user_' + Math.floor(Math.random() * 9000 + 1000), avatar: '🐻', createdAt: Date.now(), isAdmin: false },
-  wallet: { id: 'w_demo', address: C.ADDR.TON, isDemo: true, balances: { ...C.START_BALANCES } },
+  wallet: { id: 'w_demo', address: C.ADDR.TON, isDemo: true, balances: { TON: 0, USDT: 0, BTC: 0, ETH: 0 } },
   txs: [], orders: seedOrders(), trades: [], games: [] });
 let S; try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
-if (!S || S.v !== 1) S = seed();
+if (!S || S.v !== 2) S = seed();
 if (tgU) S.user.isAdmin = C.ADMIN_TG_IDS.includes(tgU.id);
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* приватный режим */ } };
 const bal = c => S.wallet.balances[c] || 0;
@@ -72,7 +74,7 @@ const walletView = () => `<header class="top"><button class="logo" data-a="logo"
 <div class="stack" id="stack">${CUR.map(card).join('')}</div>
 <div class="dots"><button class="ib sm" data-a="prev" aria-label="Предыдущая"><i data-lucide="chevron-left"></i></button>${CUR.map((c, i) => `<button class="dot" data-a="dot" data-v="${i}" aria-label="${c}"></button>`).join('')}<button class="ib sm" data-a="next" aria-label="Следующая"><i data-lucide="chevron-right"></i></button></div>
 <div class="acts">${[['deposit', 'arrow-down-left', 'Пополнить'], ['send', 'arrow-up-right', 'Отправить'], ['swap', 'repeat', 'Обменять']].map(a => `<button class="act" data-a="${a[0]}"><span><i data-lucide="${a[1]}"></i></span>${a[2]}</button>`).join('')}</div>
-<section class="glass pad"><div class="row sp"><b>Адрес пополнения</b><span class="badge" id="nt">${C.NETS[CUR[S.idx]]}</span></div><button class="addr" id="adb" data-a="copy" data-t="${C.ADDR[CUR[S.idx]]}"><span id="ad">${C.ADDR[CUR[S.idx]]}</span><i data-lucide="copy"></i></button><p class="mut sm">Тестовый режим: баланс виртуальный, переводы на этот адрес не зачисляются.</p></section>
+<section class="glass pad"><div class="row sp"><b>Адрес пополнения</b><span class="badge" id="nt">${C.NETS[CUR[S.idx]]}</span></div><button class="addr" id="adb" data-a="copy" data-t="${C.ADDR[CUR[S.idx]]}"><span id="ad">${C.ADDR[CUR[S.idx]]}</span><i data-lucide="copy"></i></button><p class="mut sm">Автоматическое зачисление пока не подключено: переводы на этот адрес баланс в приложении не пополняют.</p></section>
 <h3>Последние операции</h3><section class="glass list">${S.txs.length ? S.txs.slice(0, 5).map(txRow).join('') : empty('inbox', 'Операций пока нет', 'Пополните кошелёк или обменяйте валюту')}</section>`;
 function lay(dx = 0) {
   const cards = $$('.card'), n = cards.length; if (!n) return;
@@ -90,15 +92,12 @@ function mountStack() {
   st.onpointerup = end; st.onpointercancel = end; lay();
 }
 function deposit() {
-  modal('Пополнить', `<div class="demo">Тестовый режим: баланс виртуальный, реальные переводы не зачисляются</div><label>Валюта<select class="in" id="c">${opts(CUR, CUR[S.idx])}</select></label><small id="nt"></small><button class="addr" id="ad2" data-a="copy"></button><label style="margin-top:12px">Сумма<input class="in" id="a" inputmode="decimal" placeholder="0.00"></label><div class="err" data-e></div><button class="btn" id="go">Пополнить баланс</button>`, (w, close) => {
+  modal('Пополнить', `<label>Валюта<select class="in" id="c">${opts(CUR, CUR[S.idx])}</select></label><small id="nt"></small><button class="addr" id="ad2" data-a="copy"></button><p class="mut sm">Автоматическое зачисление пока не подключено: переводы на этот адрес баланс в приложении не пополняют.</p>`, (w) => {
     const up = () => { const c = $('#c', w).value, b = $('#ad2', w); $('#nt', w).textContent = C.NETS[c]; b.dataset.t = C.ADDR[c]; b.innerHTML = `<span>${C.ADDR[c]}</span><i data-lucide="copy"></i>`; ic(); }; up(); $('#c', w).onchange = up;
-    bind($('#go', w), () => { const c = $('#c', w).value, a = num($('#a', w).value);
-      if (!(a > 0)) return err(w, 'Введите сумму больше нуля'); if (a * C.PRICES[c] > 1e6) return err(w, 'Максимум $1 000 000 за раз');
-      setBal(c, bal(c) + a); tx('deposit', c, a); save(); close(); render(); toast(`Зачислено ${fmt(a, c)} ${c}`); });
   });
 }
 function send() {
-  modal('Отправить', `<div class="demo">Тестовый режим: перевод виртуальный, в сеть не отправляется</div><label>Валюта<select class="in" id="c">${opts(CUR, CUR[S.idx])}</select></label><small id="av"></small><label style="margin-top:10px">Адрес получателя<input class="in" id="ad" placeholder="UQ…" autocomplete="off"></label><label>Сумма<input class="in" id="a" inputmode="decimal" placeholder="0.00"></label><div class="err" data-e></div><button class="btn" id="go">Отправить</button>`, (w, close) => {
+  modal('Отправить', `<label>Валюта<select class="in" id="c">${opts(CUR, CUR[S.idx])}</select></label><small id="av"></small><label style="margin-top:10px">Адрес получателя<input class="in" id="ad" placeholder="UQ…" autocomplete="off"></label><label>Сумма<input class="in" id="a" inputmode="decimal" placeholder="0.00"></label><div class="err" data-e></div><button class="btn" id="go">Отправить</button>`, (w, close) => {
     const av = () => { $('#av', w).textContent = `Доступно: ${fmt(bal($('#c', w).value), $('#c', w).value)} ${$('#c', w).value}`; }; av(); $('#c', w).onchange = av;
     bind($('#go', w), async () => { const c = $('#c', w).value, a = num($('#a', w).value), ad = $('#ad', w).value.trim();
       if (!/^[A-Za-z0-9_-]{8,70}$/.test(ad)) return err(w, 'Адрес: 8–70 символов, только буквы, цифры, _ и -');
@@ -109,7 +108,7 @@ function send() {
   });
 }
 function swap() {
-  modal('Обменять', `<div class="demo">Курсы условные, тестовый режим</div><div class="row"><label>Отдаёте<select class="in" id="f">${opts(CUR, CUR[S.idx])}</select></label><label>Получаете<select class="in" id="t">${opts(CUR, CUR[(S.idx + 1) % CUR.length])}</select></label></div><label>Сумма<input class="in" id="a" inputmode="decimal" placeholder="0.00"></label><div class="sum"><div><span>Доступно</span><b id="av"></b></div><div><span>Комиссия ${C.SWAP_FEE * 100}%</span><b id="fe">0</b></div><div><span>Вы получите</span><b id="out">0</b></div></div><div class="err" data-e></div><button class="btn" id="go">Обменять</button>`, (w, close) => {
+  modal('Обменять', `<div class="row"><label>Отдаёте<select class="in" id="f">${opts(CUR, CUR[S.idx])}</select></label><label>Получаете<select class="in" id="t">${opts(CUR, CUR[(S.idx + 1) % CUR.length])}</select></label></div><label>Сумма<input class="in" id="a" inputmode="decimal" placeholder="0.00"></label><div class="sum"><div><span>Доступно</span><b id="av"></b></div><div><span>Комиссия ${C.SWAP_FEE * 100}%</span><b id="fe">0</b></div><div><span>Вы получите</span><b id="out">0</b></div></div><div class="err" data-e></div><button class="btn" id="go">Обменять</button>`, (w, close) => {
     const calc = () => { const f = $('#f', w).value, t = $('#t', w).value, a = num($('#a', w).value) || 0, o = rd(a * C.PRICES[f] / C.PRICES[t] * (1 - C.SWAP_FEE), t);
       $('#av', w).textContent = fmt(bal(f), f) + ' ' + f; $('#fe', w).textContent = fmt(a * C.SWAP_FEE, f) + ' ' + f; $('#out', w).textContent = fmt(o, t) + ' ' + t; return o; };
     ['#f', '#t', '#a'].forEach(s => $(s, w).oninput = calc); calc();
@@ -160,7 +159,7 @@ const segColor = m => m === 0 ? '#13243F' : m < 1 ? '#1D4F8F' : m < 3 ? '#248BFA
 function rouletteView() {
   const s = segs(), a = 360 / s.length, grad = s.map((x, i) => `${segColor(x.m)} ${i * a}deg ${(i + 1) * a}deg`).join(',');
   return `<h1 class="pt">Roulette</h1>${seg(RC0.currencies.map(c => [c, c]), RC, 'rcur')}
-<section class="rpanel"><div class="row sp"><div><small>Баланс</small><b class="rbal" id="rb">${fmt(bal(RC), RC)} ${RC}</b></div><span class="badge" style="background:rgba(255,255,255,.12);color:#9FD8FF">Тестовый режим</span></div>
+<section class="rpanel"><div class="row sp"><div><small>Баланс</small><b class="rbal" id="rb">${fmt(bal(RC), RC)} ${RC}</b></div></div>
 <div class="wheel-wrap"><div class="ptr"></div><div class="wheel" id="wheel" style="background:conic-gradient(${grad});transform:rotate(${wrot}deg)">${s.map((x, i) => `<div class="wl" style="transform:rotate(${i * a + a / 2}deg)">${x.m ? '×' + x.m : '✕'}</div>`).join('')}</div><div class="hub">TF</div></div>
 <label>Ставка, ${RC}<input class="in" id="bet" data-in="bet" inputmode="decimal" value="${lastBet}"></label><small id="bu">${bu(num(lastBet) || 0)}</small>
 <div class="qb"><button data-a="bq" data-v="min">Мин</button><button data-a="bq" data-v="half">½</button><button data-a="bq" data-v="dbl">×2</button><button data-a="bq" data-v="max">Макс</button></div><div class="err" data-e></div><button class="btn spin" id="spin" data-a="spin" ${spinning ? 'disabled' : ''}>SPIN</button></section>
@@ -188,7 +187,7 @@ const tradeRow = t => { const buy = t.buyerId === S.user.id;
   return `<div class="li"><div class="lic"><i data-lucide="handshake"></i></div><div class="lim"><b>${buy ? 'Покупка' : 'Продажа'} ${fmt(t.amount, t.currency)} ${t.currency}</b><small>${dt(t.createdAt)}, ${rub(t.total)}</small></div><div style="text-align:right"><span class="st ${t.status}">${ST[t.status]}</span>${t.status === 'pending' ? `<br><button class="btn danger s" style="margin-top:6px" data-a="tcancel" data-v="${t.id}">Отменить</button>` : ''}${S.user.isAdmin && NEXT[t.status].length && NEXT[t.status][0] !== 'cancelled' ? `<br><button class="btn sec s" style="margin-top:6px" data-a="tnext" data-v="${t.id}">${ST[NEXT[t.status][0]]}</button>` : ''}</div></div>`; };
 const profileView = () => `<h1 class="pt">Профиль</h1>
 <section class="glass pad" style="margin-top:0"><div class="oh"><span class="av" style="width:56px;height:56px;font-size:28px">${esc(S.user.avatar)}</span><div style="flex:1;min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis">@${esc(S.user.username)}</b><small>ID ${S.user.id}</small></div><button class="ib" data-a="edit" aria-label="Редактировать"><i data-lucide="pencil"></i></button></div>
-<div class="sum"><div><span>Регистрация</span><b>${dt(S.user.createdAt)}</b></div><div><span>Баланс</span><b>${usd(total())}</b></div></div><span class="badge">Тестовый режим: баланс виртуальный</span></section>
+<div class="sum"><div><span>Регистрация</span><b>${dt(S.user.createdAt)}</b></div><div><span>Баланс</span><b>${usd(total())}</b></div></div></section>
 <h3>История операций</h3><section class="glass list">${S.txs.length ? S.txs.slice(0, 20).map(txRow).join('') : empty('inbox', 'Пока пусто', 'Здесь появятся ваши операции')}</section>
 <h3>P2P-сделки</h3><section class="glass list">${S.trades.length ? S.trades.map(tradeRow).join('') : empty('handshake', 'Сделок нет', 'Откройте вкладку P2P и выберите ордер')}</section>
 <h3>Настройки</h3><section class="glass pad" style="margin-top:8px"><small>Тема</small>${seg([['light', 'Светлая'], ['auto', 'Авто'], ['dark', 'Тёмная']], S.theme, 'theme')}
@@ -204,26 +203,29 @@ function editProfile() {
 }
 
 /* ---------- Админ ---------- */
-let adminDraw = null, taps = 0, tapT = 0;
+let taps = 0, tapT = 0, AT = 'orders';
+const adminDraw = () => render();
 function adminLogin() {
-  modal('Вход администратора', `<div class="demo">Вход только для администратора</div><label>Код доступа<input class="in" id="p" type="password" placeholder="Любой код от 4 символов" autocomplete="off"></label><div class="err" data-e></div><button class="btn" id="go">Войти</button>`, (w, close) => {
+  modal('Вход администратора', `<label>Код доступа<input class="in" id="p" type="password" placeholder="От 4 символов" autocomplete="off"></label><div class="err" data-e></div><button class="btn" id="go">Войти</button>`, (w, close) => {
     bind($('#go', w), () => { if (!canAdmin()) return err(w, 'Нет доступа'); if ($('#p', w).value.length < 4) return err(w, 'Минимум 4 символа');
       S.user.isAdmin = true; save(); close(); toast('Режим администратора включён'); adminPanel(); });
   });
 }
 const oddsHTML = () => { const s = segs(), sum = s.reduce((a, x) => a + x.w, 0) || 1, rtp = s.reduce((a, x) => a + x.m * x.w, 0) / sum;
-  return `<h3 style="margin:22px 0 4px">Шансы рулетки</h3><p class="mut sm">Множитель и вес каждого сектора. Возврат игрокам (RTP): <b>${nf(rtp * 100, 1)}%</b></p>${s.map((x, i) => `<div class="row" style="margin-bottom:8px"><span class="chip" style="flex:none;width:34px;text-align:center">${i + 1}</span><input class="in" data-rm="${i}" value="${x.m}" inputmode="decimal" aria-label="Множитель"><input class="in" data-rw="${i}" value="${x.w}" inputmode="decimal" aria-label="Вес"><b style="flex:none;width:56px;text-align:right">${nf(x.w / sum * 100, 1)}%</b></div>`).join('')}<div class="err" data-e2x></div><div class="row"><button class="btn sec" data-a="rreset">Сбросить</button><button class="btn" data-a="rsave">Сохранить</button></div>`; };
-function adminPanel() {
-  modal('Админ-панель', '', (w) => {
-    const draw = () => { const sh = $('.sheet', w), y = sh.scrollTop; $('.mb', w).innerHTML = `<h3 style="margin:0 0 10px">Новый ордер</h3><label>Ник<input class="in" id="an2" maxlength="20" value="TONFLOW"></label><small>Аватар</small><div class="emo" style="margin:8px 0 14px">${C.AVATARS.map((e, i) => `<button data-av="${e}" class="${i ? '' : 'on'}">${e}</button>`).join('')}</div><div class="row"><label>Валюта<select class="in" id="ac">${opts(['TON', 'USDT'])}</select></label><label>Направление<select class="in" id="ad"><option value="sell">Продаёт крипту</option><option value="buy">Покупает крипту</option></select></label></div><div class="row"><label>Курс, ₽<input class="in" id="ar" inputmode="decimal"></label><label>Объём<input class="in" id="av" inputmode="decimal"></label></div><div class="row"><label>Мин, ₽<input class="in" id="an" inputmode="decimal"></label><label>Макс, ₽<input class="in" id="ax" inputmode="decimal"></label></div><label>Способ оплаты<input class="in" id="ap" maxlength="30"></label><div class="err" data-e></div><button class="btn" data-a="ocreate">Создать и активировать</button>
-<h3 style="margin:22px 0 4px">Ордера (${S.orders.length})</h3>${S.orders.length ? S.orders.map(o => `<div class="li"><div class="lim"><b>${esc(o.nick)}, ${o.direction === 'sell' ? 'продаёт' : 'покупает'} ${o.currency}</b><small>${rub(o.rate)}, ${fmt(o.availableAmount, o.currency)}, ${o.status === 'active' ? 'активен' : 'выключен'}</small></div><button class="btn sec s" data-a="otoggle" data-v="${o.id}">${o.status === 'active' ? 'Выкл.' : 'Вкл.'}</button><button class="btn danger s" data-a="odel" data-v="${o.id}">Удалить</button></div>`).join('') : empty('package-open', 'Ордеров нет', 'Создайте первый ордер выше')}
-<h3 style="margin:22px 0 4px">Сделки (${S.trades.length})</h3>${S.trades.length ? S.trades.map(t => `<div class="li"><div class="lim"><b>${fmt(t.amount, t.currency)} ${t.currency}, ${rub(t.total)}</b><small>${dt(t.createdAt)}, ${ST[t.status]}</small></div>${NEXT[t.status].length ? `<select class="in" style="width:auto;height:38px" data-ts="${t.id}"><option value="">Статус…</option>${NEXT[t.status].map(s => `<option value="${s}">${ST[s]}</option>`).join('')}</select>` : ''}</div>`).join('') : empty('handshake', 'Сделок нет', 'Они появятся после покупки на вкладке P2P')}${oddsHTML()}`;
-      ic(); sh.scrollTop = y; };
-    adminDraw = () => { if (w.isConnected) { draw(); render(); } }; draw();
-    w.addEventListener('click', e => { const b = e.target.closest('[data-av]'); if (b) $$('[data-av]', w).forEach(x => x.classList.toggle('on', x === b)); });
-    w.addEventListener('change', e => { const id = e.target.dataset.ts; if (!id || !e.target.value) return; const t = S.trades.find(x => x.id === id); if (t && setTrade(t, e.target.value)) { toast('Статус обновлён'); adminDraw(); } });
-  });
-}
+  return `<section class="glass pad" style="margin-top:0"><p class="mut sm" style="margin-top:0">Множитель и вес каждого сектора. Возврат игрокам (RTP): <b>${nf(rtp * 100, 1)}%</b></p>${s.map((x, i) => `<div class="row" style="margin-bottom:8px"><span class="chip" style="flex:none;width:34px;text-align:center">${i + 1}</span><input class="in" data-rm="${i}" value="${x.m}" inputmode="decimal" aria-label="Множитель"><input class="in" data-rw="${i}" value="${x.w}" inputmode="decimal" aria-label="Вес"><b style="flex:none;width:56px;text-align:right">${nf(x.w / sum * 100, 1)}%</b></div>`).join('')}<div class="err" data-e2x></div><div class="row"><button class="btn sec" data-a="rreset">Сбросить</button><button class="btn" data-a="rsave">Сохранить</button></div></section>`; };
+const adminBody = () => {
+  if (AT === 'roul') return oddsHTML();
+  if (AT === 'bal') return `<section class="glass pad" style="margin-top:0"><p class="mut sm" style="margin-top:0">Баланс на этом устройстве.</p>${CUR.map(c => `<label>${c}<input class="in" data-b="${c}" inputmode="decimal" value="${bal(c)}"></label>`).join('')}<div class="err" data-eb></div><button class="btn" data-a="bsave">Сохранить баланс</button></section>`;
+  if (AT === 'trades') return S.trades.length ? `<section class="glass list" style="margin-top:0">${S.trades.map(t => `<div class="li" style="flex-wrap:wrap"><div class="lim"><b>${t.buyerId === S.user.id ? 'Покупка' : 'Продажа'} ${fmt(t.amount, t.currency)} ${t.currency}</b><small>${dt(t.createdAt)}, ${rub(t.total)}</small></div><span class="st ${t.status}">${ST[t.status]}</span>${NEXT[t.status].length ? `<div class="row" style="flex-basis:100%">${NEXT[t.status].map(x => `<button class="btn sec s" data-a="tset" data-v="${t.id}:${x}">${ST[x]}</button>`).join('')}</div>` : ''}</div>`).join('')}</section>` : empty('handshake', 'Сделок нет', 'Они появятся после покупки на вкладке P2P');
+  return `<section class="glass pad" style="margin-top:0"><h3 style="margin:0 0 12px">Новый ордер</h3><label>Ник<input class="in" id="an2" maxlength="20" value="TONFLOW"></label><small>Аватар</small><div class="emo" style="margin:8px 0 14px">${C.AVATARS.map((e, i) => `<button data-a="av" data-av="${e}" class="${i ? '' : 'on'}">${e}</button>`).join('')}</div>
+<div class="row"><label>Валюта<select class="in" id="ac">${opts(['TON', 'USDT'])}</select></label><label>Направление<select class="in" id="ad"><option value="sell">Продаёт крипту</option><option value="buy">Покупает крипту</option></select></label></div>
+<div class="row"><label>Курс, ₽<input class="in" id="ar" inputmode="decimal"></label><label>Объём<input class="in" id="av" inputmode="decimal"></label></div>
+<div class="row"><label>Мин, ₽<input class="in" id="an" inputmode="decimal"></label><label>Макс, ₽<input class="in" id="ax" inputmode="decimal"></label></div>
+<label>Способ оплаты<input class="in" id="ap" maxlength="30"></label><div class="err" data-e></div><button class="btn" data-a="ocreate">Создать ордер</button></section>
+<h3>Ордера (${S.orders.length})</h3>${S.orders.length ? S.orders.map(o => `<article class="glass oc"><div class="oh"><span class="av">${esc(o.avatar)}</span><b>${esc(o.nick)}</b><span class="st ${o.status === 'active' ? 'done' : ''}">${o.status === 'active' ? 'активен' : 'выключен'}</span></div><div class="meta"><span class="chip">${o.direction === 'sell' ? 'продаёт' : 'покупает'} ${o.currency}</span><span class="chip">${rub(o.rate)}</span><span class="chip">${fmt(o.availableAmount, o.currency)}</span><span class="chip">${esc(o.paymentMethod)}</span></div><div class="row"><button class="btn sec s" data-a="otoggle" data-v="${o.id}">${o.status === 'active' ? 'Выключить' : 'Включить'}</button><button class="btn danger s" data-a="odel" data-v="${o.id}">Удалить</button></div></article>`).join('') : empty('package-open', 'Ордеров нет', 'Создайте первый ордер выше')}`;
+};
+const adminView = () => `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><button class="ib" data-a="tab" data-v="profile" aria-label="Назад"><i data-lucide="chevron-left"></i></button><h1 style="font-size:24px">Админ-панель</h1></div>${seg([['orders', 'Ордера'], ['trades', 'Сделки'], ['roul', 'Рулетка'], ['bal', 'Баланс']], AT, 'atab')}${adminBody()}`;
+function adminPanel() { tab = 'admin'; render(true); }
 
 /* ---------- Действия ---------- */
 const A = {
@@ -241,12 +243,16 @@ const A = {
   tcancel: async el => { const t = S.trades.find(x => x.id === el.dataset.v); if (t && await ask('Отменить сделку? Замороженные средства вернутся.', 'Отменить сделку') && setTrade(t, 'cancelled')) { render(); toast('Сделка отменена'); } },
   reset: async () => { if (await ask('Все локальные данные будут удалены, баланс вернётся к стартовому.', 'Сбросить')) { S = seed(); save(); tab = 'wallet'; render(true); toast('Данные сброшены'); } },
   admin: adminPanel, alogout: () => { S.user.isAdmin = false; save(); render(); toast('Вы вышли из админ-режима'); },
-  rsave: el => { const w = el.closest('.mw'), s = [], n = segs().length; for (let i = 0; i < n; i++) { const m = num($(`[data-rm="${i}"]`, w).value), x = num($(`[data-rw="${i}"]`, w).value);
+  rsave: el => { const w = $('#view'), s = [], n = segs().length; for (let i = 0; i < n; i++) { const m = num($(`[data-rm="${i}"]`, w).value), x = num($(`[data-rw="${i}"]`, w).value);
       if (!(m >= 0 && m <= 100 && x >= 0)) return void ($('[data-e2x]', w).textContent = `Сектор ${i + 1}: проверьте значения`); s.push({ m, w: x }); }
     if (!s.some(x => x.w > 0)) return void ($('[data-e2x]', w).textContent = 'Хотя бы один вес должен быть больше нуля'); S.rc = s; save(); adminDraw(); toast('Шансы сохранены'); },
   rreset: () => { delete S.rc; save(); adminDraw(); toast('Шансы сброшены'); },
   tnext: el => { const t = S.trades.find(x => x.id === el.dataset.v); if (t && setTrade(t, NEXT[t.status][0])) { render(); toast('Статус обновлён'); } },
-  ocreate: el => { const w = el.closest('.mw'), g = i => $(i, w).value, c = g('#ac'), r = num(g('#ar')), v = num(g('#av')), mn = num(g('#an')), mx = num(g('#ax')), p = g('#ap').trim(), nk = g('#an2').trim(), av = $('[data-av].on', w), e = $('[data-e]', w);
+  atab: el => { AT = el.dataset.v; render(); },
+  av: el => $$('[data-a="av"]').forEach(x => x.classList.toggle('on', x === el)),
+  tset: el => { const [id, st] = el.dataset.v.split(':'), t = S.trades.find(x => x.id === id); if (t && setTrade(t, st)) { render(); toast('Статус обновлён'); } },
+  bsave: () => { const w = $('#view'), v = CUR.map(c => [c, num($(`[data-b="${c}"]`, w).value)]); if (v.some(x => !(x[1] >= 0))) return void ($('[data-eb]', w).textContent = 'Введите числа не меньше нуля'); v.forEach(x => setBal(x[0], x[1])); save(); render(); toast('Баланс сохранён'); },
+  ocreate: el => { const w = $('#view'), g = i => $(i, w).value, c = g('#ac'), r = num(g('#ar')), v = num(g('#av')), mn = num(g('#an')), mx = num(g('#ax')), p = g('#ap').trim(), nk = g('#an2').trim(), av = $('[data-av].on', w), e = $('[data-e]', w);
     if (![r, v, mn, mx].every(x => x > 0)) return void (e.textContent = 'Заполните курс, объём, минимум и максимум положительными числами');
     if (mn > mx) return void (e.textContent = 'Минимум не может быть больше максимума'); if (nk.length < 2) return void (e.textContent = 'Укажите ник от 2 символов'); if (p.length < 2) return void (e.textContent = 'Укажите способ оплаты');
     S.orders.unshift({ id: uid('o_'), ownerId: 'admin', nick: nk, avatar: av ? av.dataset.av : C.AVATARS[0], currency: c, direction: g('#ad'), rate: r, availableAmount: v, minAmount: mn, maxAmount: mx, paymentMethod: p, status: 'active' }); save(); adminDraw(); toast('Ордер создан'); },
@@ -258,12 +264,13 @@ document.addEventListener('input', e => { const k = e.target.dataset.in; if (k =
 
 /* ---------- Рендер ---------- */
 let tab = 'wallet';
-const VIEWS = { wallet: walletView, p2p: p2pView, roulette: rouletteView, profile: profileView };
+const VIEWS = { wallet: walletView, p2p: p2pView, roulette: rouletteView, profile: profileView, admin: adminView };
 const NAV = [['wallet', 'wallet', 'Wallet'], ['p2p', 'arrow-left-right', 'P2P'], ['roulette', 'disc-3', 'Roulette'], ['profile', 'user-round', 'Profile']];
 function applyTheme() { const t = S.theme === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : S.theme; document.documentElement.dataset.theme = t; $('meta[name=theme-color]').content = t === 'dark' ? '#0B1220' : '#F4F8FC'; }
 function render(reset) {
+  if (tab === 'admin' && !S.user.isAdmin) tab = 'profile';
   const v = $('#view'), top = reset === true, y = top ? 0 : window.scrollY; v.style.minHeight = v.offsetHeight + 'px';
-  $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.a === 'tab' && b.dataset.v === tab));
+  $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.a === 'tab' && b.dataset.v === (tab === 'admin' ? 'profile' : tab)));
   if (top) v.classList.remove('in');
   v.innerHTML = VIEWS[tab](); v.style.setProperty('--accent', C.COLORS[CUR[S.idx]][1]);
   if (top) void v.offsetWidth; v.classList.add('in');

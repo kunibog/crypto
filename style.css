@@ -82,3 +82,11 @@ body.lock{overflow:hidden}
 .hub{inset:37%;display:grid;place-items:center;font-weight:800;letter-spacing:.04em;color:#7FD0FF;background:radial-gradient(circle,#1B3A6B,#08111F);border:3px solid #54B8FF}
 .qb{display:flex;gap:8px;margin:10px 0 12px}.qb button{flex:1;height:38px;border-radius:12px;background:rgba(255,255,255,.1);color:#fff;font-weight:700}
 .spin{height:56px;font-size:18px;letter-spacing:.14em;box-shadow:0 0 28px rgba(84,184,255,.55)}
+/* v3 */
+html,body{overscroll-behavior:none}
+#view{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right))}
+.stack{margin-left:0;margin-right:0}.tot,.pt{margin-left:2px;margin-right:2px}h3{margin-left:2px}
+.mw{inset:auto;top:0;left:0;width:100%;height:var(--vh,100dvh)}
+.sheet{max-height:calc(var(--vh,100dvh) - 24px)}
+.emo button{border:0}.emo button.on{outline:2px solid var(--blue)}
+.seg button{padding:10px 2px;font-size:13px}
